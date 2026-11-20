@@ -1,49 +1,65 @@
 #!/usr/bin/env python3
-# Copies the repo-held entry.png to $MAKEFUN_OUTPUT_DIR/entry.png,
-# byte for byte, after validating it is a real non-empty PNG.
-"""news-image-20261120: write the day's news image to the output directory.
+"""Emit the 20 November 2026 front page.
 
-The entry image is a 1024x1024 PNG held in this repository (entry.png),
-a dense front-page infographic summing up Friday 20 November 2026:
-Russia's massive overnight strike on Ukraine hours after the
-Trump-Xi-Putin trilateral in Shenzhen, plus 24 more stories across
-markets, conflict, tech, and the wider world. This program copies it,
-byte for byte, to $MAKEFUN_OUTPUT_DIR/entry.png. Standard library only,
-no network, no randomness, no clock: two runs write identical bytes.
+The repository holds the finished infographic as entry.png: a dense
+one-page newspaper summary of Friday 20 November 2026, led by Russia's
+overnight strike on Ukraine and followed by 24 further stories. This
+script's only job is to place an exact copy of that image at
+$MAKEFUN_OUTPUT_DIR/entry.png.
+
+It uses nothing but the standard library, touches no network, reads no
+clock, and makes no random choices, so repeated runs produce identical
+bytes. Before copying it checks the first eight bytes against the PNG
+signature, and refuses to write anything if the image is absent, empty,
+or not a PNG at all.
 """
 
 import os
-import shutil
 import sys
 
-IMAGE_NAME = "entry.png"
-
-# The 8-byte signature every PNG file starts with.
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+IMAGE = "entry.png"
+SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
-def main() -> int:
+def die(reason):
+    """Report a problem on stderr and stop with a nonzero status."""
+    sys.stderr.write("news-image-20261120: " + reason + "\n")
+    raise SystemExit(1)
+
+
+def load_image():
+    """Return the repository image's bytes, after checking it is a PNG.
+
+    The whole file is read and its opening bytes compared to the PNG
+    signature, so a text file, an empty file, or a truncated image is
+    caught before anything is written to the output directory.
+    """
     here = os.path.dirname(os.path.abspath(__file__))
-    source = os.path.join(here, IMAGE_NAME)
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    target = os.path.join(out_dir, IMAGE_NAME)
-    if not os.path.isfile(source):
-        sys.stderr.write(f"news-image-20261120: {IMAGE_NAME} not found beside main.py\n")
-        return 1
-    with open(source, "rb") as f:
-        header = f.read(len(PNG_MAGIC))
-    if header != PNG_MAGIC:
-        # A text file, an empty file, or a truncated PNG all fail here:
-        # none of them starts with the PNG signature.
-        sys.stderr.write(
-            f"news-image-20261120: {IMAGE_NAME} is not a valid PNG "
-            "(missing or wrong magic header, or the file is empty)\n"
+    path = os.path.join(here, IMAGE)
+    if not os.path.isfile(path):
+        die(IMAGE + " not found beside main.py")
+    with open(path, "rb") as handle:
+        data = handle.read()
+    if len(data) < len(SIGNATURE) or data[: len(SIGNATURE)] != SIGNATURE:
+        die(
+            IMAGE
+            + " is not a valid PNG "
+            + "(missing or wrong magic header, or the file is empty)"
         )
-        return 1
+    return data
+
+
+def main():
+    """Copy the validated image into the output directory."""
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "")
+    if not out_dir:
+        die("MAKEFUN_OUTPUT_DIR is not set")
+    data = load_image()
     os.makedirs(out_dir, exist_ok=True)
-    shutil.copyfile(source, target)
-    return 0
+    target = os.path.join(out_dir, IMAGE)
+    with open(target, "wb") as handle:
+        handle.write(data)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
